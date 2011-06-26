@@ -1,0 +1,11 @@
+\NewEntry
+TODO
+
+1. handle errors
+  * EOF
+  * invalid types must not crash lifecycle. just fail this time
+  * others may
+2. compex flow of control (back and forth)
+3. TODO: timeout for response
+4. server automation (full lifecycle)
+5. several-argument methods
