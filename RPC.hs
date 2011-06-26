@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC #-}
-{-# LANGUAGE ExistentialQuantification, ViewPatterns, OverloadedStrings #-}
+{-# LANGUAGE ExistentialQuantification, ViewPatterns, OverloadedStrings, NoMonomorphismRestriction #-}
 module RPC where
 
 import Data.ByteString (ByteString, hPutStr)
@@ -50,6 +50,7 @@ getMethod conn name = return f
               Error err -> fail err)
 
 
+-- TODO: clear out why types of encoded data leaks to this function
 newConnection readF writeF =
   do
     pending <- H.new (==) (fromInteger . toInteger . hash)
@@ -87,7 +88,7 @@ dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String na
   do
     handlerMb <- H.lookup (conn_methods conn) name
     case handlerMb of
-      Just handler ->
+      Just (Handler handler) ->
         do
           response <- catch
                       (do
@@ -106,3 +107,11 @@ dispatch conn o@(Object (mlookup ["id", "response", "error"] -> Just [id, _, _])
       Just h -> h o
       Nothing -> fail ("Unknown response:" ++ show o)
 dispatch _ o = fail ("Unknown message:" ++ show o)
+
+_test1 r w = do
+  c <- newConnection r w
+  registerMethodHandler c "m1" (undefined :: Int -> IO String)
+  registerMethodHandler c "m2" (undefined :: String -> IO Int)
+  m3 <- (getMethod c "m3" :: IO (Int -> IO String))
+  m4 <- (getMethod c "m4" :: IO (String -> IO Int))
+  return c
