@@ -18,6 +18,8 @@ import Control.Concurrent.MVar (newEmptyMVar, newMVar, putMVar, takeMVar, modify
 import Control.Exception (bracket_)
 import Control.Concurrent (forkIO)
 import Data.Hashable (hash)
+import IO (hPutStrLn, stderr)
+import Data.Vector (toList)
 
 data Connection a b = Connection { conn_send :: Value -> IO (),
                                   conn_pending :: a,
@@ -45,9 +47,14 @@ getMethod conn name = return f
           (do
             conn_send conn (object ["id" .= id, "method" .= String (T.pack name), "params" .= singleton (toJSON a)])
             response <- takeMVar var
-            case fromJSON response of
-              Success res -> return res
-              Error err -> fail err)
+            case response of
+              Object (mlookup ["result", "error"] -> Just [result, Null]) ->
+                case fromJSON result of
+                  Success resultValue -> return resultValue
+                  Error err -> fail ("Invalid return type: " ++ show err)
+              Object (mlookup ["result", "error"] -> Just [Null, error]) ->
+                fail ("Service failed: " ++ show error)
+              _ -> fail ("Invalid response:" ++ show response))
 
 
 -- TODO: clear out why types of encoded data leaks to this function
@@ -88,7 +95,7 @@ newConnection readF writeF =
     return conn
 
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
-dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, params])) =
+dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, Array (toList -> [params])])) =
   do
     handlerMb <- H.lookup (conn_methods conn) (T.unpack name)
     case handlerMb of
@@ -108,7 +115,7 @@ dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String na
   where
     errorResponse errorString = object ["id" .= id, "error" .= errorString, "result" .= Null]
 
-dispatch conn o@(Object (mlookup ["id", "response", "error"] -> Just [id, _, _])) =
+dispatch conn o@(Object (mlookup ["id", "result", "error"] -> Just [id, _, _])) =
   do
     handler <- H.lookup (conn_pending conn) id
     case handler of
