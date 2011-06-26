@@ -1,18 +1,15 @@
 module Main where
 
 import qualified RPC
-import qualified System.Process as P
+import System.Process (CmdSpec(RawCommand))
+import System.IO.Unsafe (unsafePerformIO)
 
-makeConnection =
+makeConnection = RPC.newConnectionCommand (RawCommand "./TestServer" [])
+
+main =
   do
-    (Just inH, Just outH, Nothing, process) <- P.createProcess $ P.CreateProcess {
-                                            P.cmdspec = P.RawCommand "./TestServer" [],
-                                            P.cwd = Nothing,
-                                            P.env = Nothing,
-                                            P.std_in = P.CreatePipe,
-                                            P.std_out = P.CreatePipe,
-                                            P.std_err = P.Inherit,
-                                            P.close_fds = True}
-    RPC.newConnectionHandles outH inH
-
-main = return ()
+    c <- makeConnection
+    mIO <- RPC.getMethod c "exp" :: IO (Double -> IO Double)
+    let m v = unsafePerformIO (mIO v)
+    putStrLn ("m 1 = " ++ show (m 1))
+    putStrLn ("m 10 = " ++ show (m 10))

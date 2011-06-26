@@ -21,6 +21,8 @@ import Control.Concurrent (forkIO)
 import Data.Hashable (hash)
 import IO (hPutStrLn, hSetBuffering, BufferMode(NoBuffering), stderr)
 import Data.Vector (toList)
+import qualified System.Process as P
+import Monad (when)
 
 data Connection a b = Connection { conn_send :: Value -> IO (),
                                   conn_pending :: a,
@@ -100,6 +102,18 @@ newConnectionHandles handleIn handleOut =
     hSetBuffering handleOut NoBuffering
     newConnection False (B.hGetSome handleIn 1024) (B.hPut handleOut)
 
+newConnectionCommand cmdSpec =
+  do
+    (Just inH, Just outH, Nothing, process) <- P.createProcess $ P.CreateProcess {
+                                            P.cmdspec = cmdSpec,
+                                            P.cwd = Nothing,
+                                            P.env = Nothing,
+                                            P.std_in = P.CreatePipe,
+                                            P.std_out = P.CreatePipe,
+                                            P.std_err = P.Inherit,
+                                            P.close_fds = True}
+    newConnectionHandles outH inH
+
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, Array (toList -> [params])])) =
   do
@@ -130,7 +144,7 @@ dispatch conn o@(Object (mlookup ["id", "result", "error"] -> Just [id, _, _])) 
 dispatch _ o = fail ("Unknown message:" ++ show o)
 
 _test1 r w = do
-  c <- newConnection r w
+  c <- newConnection False r w
   registerMethodHandler c "m1" (undefined :: Int -> IO String)
   registerMethodHandler c "m2" (undefined :: String -> IO Int)
   m3 <- (getMethod c "m3" :: IO (Int -> IO String))
