@@ -40,10 +40,10 @@ getMethod conn name = return f
         id <- (conn_counter conn)
         var <- newEmptyMVar
         bracket_
-          (insert (conn_pending conn) name (putMVar var))
-          (delete (conn_pending conn) name)
+          (insert (conn_pending conn) (Number $ I id) (putMVar var))
+          (delete (conn_pending conn) (Number $ I id))
           (do 
-            conn_send conn (object ["id" .= id, "method" .= name, "params" .= singleton (toJSON a)])
+            conn_send conn (object ["id" .= id, "method" .= String (T.pack name), "params" .= singleton (toJSON a)])
             response <- takeMVar var
             case fromJSON response of
               Success res -> return res
@@ -86,7 +86,7 @@ newConnection readF writeF =
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, params])) =
   do
-    handlerMb <- H.lookup (conn_methods conn) name
+    handlerMb <- H.lookup (conn_methods conn) (T.unpack name)
     case handlerMb of
       Just (Handler handler) ->
         do
