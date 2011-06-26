@@ -58,7 +58,7 @@ getMethod conn name = return f
               _ -> fail ("Invalid response:" ++ show response))
 
 
-newConnection readF writeF =
+newConnection debug readF writeF =
   do
     pending <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
@@ -68,15 +68,15 @@ newConnection readF writeF =
       writer =
         do
           value <- takeMVar writeVar
-          hPutStrLn stderr ("Writing: " ++ show value)
+          when debug $ hPutStrLn stderr ("Writing: " ++ show value)
           writeF (toByteString $ fromValue value)
-          hPutStrLn stderr ("Written")
+          when debug $ hPutStrLn stderr ("Written")
           writer
       reader buffer =
         do
-          hPutStrLn stderr ("Reading")
+          when debug $ hPutStrLn stderr ("Reading")
           parseResult <- parseWith readF json buffer
-          hPutStrLn stderr ("Read: " ++ show parseResult)
+          when debug $ hPutStrLn stderr ("Read: " ++ show parseResult)
           case parseResult of
             AP.Fail _ _ msg -> fail ("failed to parse input: " ++ msg)
             AP.Partial _ -> fail "Partial must not be here"
@@ -98,7 +98,7 @@ newConnectionHandles handleIn handleOut =
   do
     hSetBuffering handleIn NoBuffering
     hSetBuffering handleOut NoBuffering
-    newConnection (B.hGetSome handleIn 1024) (B.hPut handleOut)
+    newConnection False (B.hGetSome handleIn 1024) (B.hPut handleOut)
 
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, Array (toList -> [params])])) =
