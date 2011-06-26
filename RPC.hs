@@ -42,7 +42,7 @@ getMethod conn name = return f
         bracket_
           (insert (conn_pending conn) (Number $ I id) (putMVar var))
           (delete (conn_pending conn) (Number $ I id))
-          (do 
+          (do
             conn_send conn (object ["id" .= id, "method" .= String (T.pack name), "params" .= singleton (toJSON a)])
             response <- takeMVar var
             case fromJSON response of
