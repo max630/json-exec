@@ -61,11 +61,15 @@ newConnection readF writeF =
       writer =
         do
           value <- takeMVar writeVar
+          hPutStrLn stderr ("Writing: " ++ show value)
           writeF (toByteString $ fromValue value)
+          hPutStrLn stderr ("Written")
           writer
       reader buffer =
         do
+          hPutStrLn stderr ("Reading")
           parseResult <- parseWith readF json buffer
+          hPutStrLn stderr ("Read: " ++ show parseResult)
           case parseResult of
             AP.Fail _ _ msg -> fail ("failed to parse input: " ++ msg)
             AP.Partial _ -> fail "Partial must not be here"
