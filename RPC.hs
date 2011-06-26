@@ -58,7 +58,6 @@ getMethod conn name = return f
               _ -> fail ("Invalid response:" ++ show response))
 
 
--- TODO: clear out why types of encoded data leaks to this function
 newConnection readF writeF =
   do
     pending <- H.new (==) (fromInteger . toInteger . hash)
