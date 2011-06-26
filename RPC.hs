@@ -3,6 +3,7 @@
 module RPC where
 
 import Data.ByteString (ByteString, hPutStr)
+import qualified Data.ByteString as B
 import Data.Aeson (FromJSON, fromJSON, ToJSON, toJSON, Value(Array, Object, Number, Null, String), object, (.=), Result(Success, Error), json)
 import Data.Attoparsec (parseWith)
 import qualified Data.Attoparsec as AP
@@ -18,7 +19,7 @@ import Control.Concurrent.MVar (newEmptyMVar, newMVar, putMVar, takeMVar, modify
 import Control.Exception (bracket_)
 import Control.Concurrent (forkIO)
 import Data.Hashable (hash)
-import IO (hPutStrLn, stderr)
+import IO (hPutStrLn, hSetBuffering, BufferMode(NoBuffering), stderr)
 import Data.Vector (toList)
 
 data Connection a b = Connection { conn_send :: Value -> IO (),
@@ -93,6 +94,12 @@ newConnection readF writeF =
     forkIO (reader "")
     forkIO writer
     return conn
+
+newConnectionHandles handleIn handleOut =
+  do
+    hSetBuffering handleIn NoBuffering
+    hSetBuffering handleOut NoBuffering
+    newConnection (B.hGetSome handleIn 1024) (B.hPut handleOut)
 
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, Array (toList -> [params])])) =
