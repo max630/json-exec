@@ -11,7 +11,7 @@ package RPCX;
 
 sub new {
     my ($read, $write) = @_;
-    my $self = bless {}, ();
+    my $self = bless {};
 
     $self->{json} = JSON->new;
 
@@ -22,6 +22,8 @@ sub new {
     $self->{counter} = 1;
     $self->{responses} = {};
     $self->{methods} = {};
+
+    return $self;
 }
 
 sub handle {
