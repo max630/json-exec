@@ -7,6 +7,6 @@ import Control.Concurrent.MVar (newMVar, putMVar)
 main =
   do
     var <- newMVar 0
-    connection <- RPC.newConnectionHandles stdin stdout
+    connection <- RPC.newConnectionHandles True stdin stdout
     RPC.registerMethodHandler connection "exp" ((\x -> return (exp x)) :: Double -> IO Double)
     putMVar var 10

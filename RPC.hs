@@ -96,13 +96,13 @@ newConnection debug readF writeF =
     forkIO writer
     return conn
 
-newConnectionHandles handleIn handleOut =
+newConnectionHandles debug handleIn handleOut =
   do
     hSetBuffering handleIn NoBuffering
     hSetBuffering handleOut NoBuffering
-    newConnection False (B.hGetSome handleIn 1024) (B.hPut handleOut)
+    newConnection debug (B.hGetSome handleIn 1024) (B.hPut handleOut)
 
-newConnectionCommand cmdSpec =
+newConnectionCommand debug cmdSpec =
   do
     (Just inH, Just outH, Nothing, process) <- P.createProcess $ P.CreateProcess {
                                             P.cmdspec = cmdSpec,
@@ -112,7 +112,7 @@ newConnectionCommand cmdSpec =
                                             P.std_out = P.CreatePipe,
                                             P.std_err = P.Inherit,
                                             P.close_fds = True}
-    newConnectionHandles outH inH
+    newConnectionHandles debug outH inH
 
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
 dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, Array (toList -> [params])])) =
