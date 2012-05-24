@@ -77,7 +77,9 @@ sub call_method {
     $self->{counter}++;
 
     my $obj = { id => $id, method => $method, params => \@params };
+    print "w0\n";
     &{$self->{write}}($self->{json}->encode($obj));
+    print "w1\n";
 
     # call $self->handle
     return $self->handle($id);
