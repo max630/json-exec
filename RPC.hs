@@ -1,28 +1,32 @@
 {-# OPTIONS_GHC #-}
-{-# LANGUAGE ExistentialQuantification, ViewPatterns, OverloadedStrings, NoMonomorphismRestriction #-}
+{-# LANGUAGE ExistentialQuantification, ViewPatterns, OverloadedStrings, NoMonomorphismRestriction, ScopedTypeVariables #-}
 module RPC where
 
 import Data.ByteString (ByteString, hPutStr)
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as StrictB
 import Data.Aeson (FromJSON, fromJSON, ToJSON, toJSON, Value(Array, Object, Number, Null, String), object, (.=), Result(Success, Error), json)
-import Data.Attoparsec (parseWith)
-import qualified Data.Attoparsec as AP
+import Data.Attoparsec.Lazy (parseWith)
+import qualified Data.Attoparsec.Lazy as AP
 import Data.Attoparsec.Number (Number(I))
 import Data.Aeson.Encode (fromValue)
 import qualified Data.Text as T
-import Blaze.ByteString.Builder (toByteString)
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import Data.Vector (singleton)
 import Data.HashTable (insert, delete)
-import qualified Data.Map as M
+import Data.Text.Lazy.Builder (toLazyText)
+-- import qualified Data.Map as M
 import qualified Data.HashTable as H
 import Control.Concurrent.MVar (newEmptyMVar, newMVar, putMVar, takeMVar, modifyMVar)
 import Control.Exception (bracket_)
 import Control.Concurrent (forkIO)
 import Data.Hashable (hash)
-import IO (hPutStrLn, hSetBuffering, BufferMode(NoBuffering), stderr)
+import System.IO (hPutStrLn, hSetBuffering, BufferMode(NoBuffering), stderr)
 import Data.Vector (toList)
 import qualified System.Process as P
-import Monad (when)
+import Control.Monad (when)
+
+import qualified Data.HashMap.Strict as M
 
 data Connection a b = Connection { conn_send :: Value -> IO (),
                                   conn_pending :: a,
@@ -60,7 +64,7 @@ getMethod conn name = return f
               _ -> fail ("Invalid response:" ++ show response))
 
 
-newConnection debug readF writeF =
+newConnection debug (readF :: IO B.ByteString) writeF =
   do
     pending <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
@@ -71,7 +75,7 @@ newConnection debug readF writeF =
         do
           value <- takeMVar writeVar
           when debug $ hPutStrLn stderr ("Writing: " ++ show value)
-          writeF (toByteString $ fromValue value)
+          writeF (encodeUtf8 $ toLazyText $ fromValue value)
           when debug $ hPutStrLn stderr ("Written")
           writer
       reader buffer =
@@ -100,7 +104,11 @@ newConnectionHandles debug handleIn handleOut =
   do
     hSetBuffering handleIn NoBuffering
     hSetBuffering handleOut NoBuffering
-    newConnection debug (B.hGetSome handleIn 1024) (B.hPut handleOut)
+    newConnection debug (hGetSome handleIn 1024) (B.hPut handleOut)
+
+hGetSome h s = do
+  chunk <- StrictB.hGetSome h s
+  return $ B.fromChunks [chunk]
 
 newConnectionCommand debug cmdSpec =
   do
