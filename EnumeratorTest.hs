@@ -1,5 +1,5 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
-module EnumeratorServer where
+module EnumeratorTest where
 
 import Data.Attoparsec.Enumerator (iterParser)
 import Data.Aeson.Parser (json)
