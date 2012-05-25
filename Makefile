@@ -1,3 +1,3 @@
 
 %.hi: %.hs
-	ghc --make $^
+	ghc $(GHC_OPTS) --make $^
