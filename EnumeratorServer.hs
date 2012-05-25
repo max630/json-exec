@@ -11,10 +11,11 @@ import Data.Enumerator.Binary (enumHandle)
 import Data.Attoparsec.Combinator (eitherP)
 import qualified Data.Attoparsec.ByteString as APB
 import Data.Attoparsec.ByteString (endOfInput, inClass, try)
+import qualified Data.Enumerator.List as EL
 
 iter = iterParser json
 
-jsonOrEOF = APB.takeWhile (inClass " \n") >> eitherP (try endOfInput) json
+jsonOrEOF = APB.takeWhile (inClass " \t\r\n") >> eitherP (try endOfInput) json
 
 -- this does not work - requires json always. Looks like jsonOrEOF is more right way
 jsonWoWhites = APB.takeWhile (inClass " \n") >> json
@@ -32,3 +33,12 @@ echo0 = (stdinEnum $$ printChunks True)
 echo1 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF) =$ printChunks True))
 
 echo2 = (stdinEnum $$ (E.sequence (iterParser jsonWoWhites) =$ printChunks True))
+
+echo3 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF)) =$ EL.isolateWhile isRight =$ printChunks True)
+  where
+    isRight (Left _) = False
+    isRight (Right _) = True
+
+-- this looks like the most correct way
+echo4 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF) =$ EL.mapM_ (\v -> putStrLn ("chunk: " ++ show v))))
+
