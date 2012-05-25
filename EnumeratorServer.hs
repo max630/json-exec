@@ -11,5 +11,9 @@ import Data.Enumerator (($$), printChunks)
 
 iter = iterParser json
 
+-- run the results with run_
+
 -- blindly echoing chinks
-echo0 = run_ ((enumHandle 10240 stdin) $$ (printChunks True))
+echo0 = ((enumHandle 10240 stdin) $$ (printChunks True))
+
+
