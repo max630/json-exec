@@ -41,9 +41,6 @@ echo1 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF) =$ printChunks True))
 echo2 = (stdinEnum $$ (E.sequence (iterParser jsonWoWhites) =$ printChunks True))
 
 echo3 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF)) =$ EL.isolateWhile isRight =$ printChunks True)
-  where
-    isRight (Left _) = False
-    isRight (Right _) = True
 
 -- this looks like the most correct way
 -- or echo3
@@ -64,5 +61,13 @@ echo5 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF)
     -- so there must be something smarted than mapM
     -- (when it comes that far)
     dispatch = return
-    isRight (Left _) = False
-    isRight (Right _) = True
+
+echo6 = (stdinEnum $$ (E.sequence (iterParser jsonOrEOF)
+                        =$ EL.isolateWhile isRight
+                        =$ EL.map (\(Right v) -> v)
+                        =$ EL.mapM_ dispatch))
+  where
+    dispatch v = liftIO $ BSL.hPut stdout (AE.encode v)
+
+isRight (Left _) = False
+isRight (Right _) = True
