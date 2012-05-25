@@ -1,6 +1,14 @@
 \NewEntry
 TODO
 
++ make IO
+ - make it interruptible (try to keep it simple)
+- make hardcoded real-like dispatch
+- test server and client
+- real dispatch
+\NewEntry
+OLD_TODO
+
 1. handle errors
   * EOF
   * invalid types must not crash lifecycle. just fail this time
