@@ -4,18 +4,32 @@ module RPC where
 
 import qualified Data.Aeson as A
 import qualified Data.HashTable as H
+import qualified Data.HashMap.Strict as M
 import qualified GHC.IO.Handle as GIO
+import qualified Control.Concurrent.MVar as MV
+import qualified Control.Exception as E
+import qualified Data.Text as T
+import qualified Data.Vector as V
 
-data Connection a b = Connection { conn_send :: Value -> IO (),
-                                  conn_pending :: a,
+import Data.Aeson ((.=))
+import Data.Attoparsec.Number (Number(I))
+import Control.Monad (when)
+import System.IO (hPutStrLn, stderr)
+import Control.Concurrent (forkIO)
+import Data.Hashable (Hashable(hash))
+
+import IOFrontend (mkHandler)
+
+data Connection a b = Connection { conn_send :: A.Value -> IO (),
+                                  conn_pending :: H.HashTable A.Value a,
                                   conn_counter :: IO Integer,
-                                  conn_methods :: b}
+                                  conn_methods :: H.HashTable String b}
 
-data Handler = forall a b . (FromJSON a, ToJSON b) => Handler (a -> IO b)
+data Handler = forall a b . (A.FromJSON a, A.ToJSON b) => Handler (a -> IO b)
 
 
 -- registerMethodHandler :: (FromJSON a, ToJSON b) => Connection -> String -> (a -> IO b) -> IO ()
-registerMethodHandler conn name handler = insert (conn_methods conn) name (Handler handler)
+registerMethodHandler conn name handler = H.insert (conn_methods conn) name (Handler handler)
 
 mlookup ks kx = if all (flip M.member kx) ks then Just (map ((M.!) kx) ks) else Nothing
 
@@ -25,34 +39,34 @@ getMethod conn name = return f
     f a =
       do
         id <- (conn_counter conn)
-        var <- newEmptyMVar
-        bracket_
-          (insert (conn_pending conn) (Number $ I id) (putMVar var))
-          (delete (conn_pending conn) (Number $ I id))
+        var <- MV.newEmptyMVar
+        E.bracket_
+          (H.insert (conn_pending conn) (A.Number $ I id) (MV.putMVar var))
+          (H.delete (conn_pending conn) (A.Number $ I id))
           (do
-            conn_send conn (object ["id" .= id, "method" .= String (T.pack name), "params" .= singleton (toJSON a)])
-            response <- takeMVar var
+            conn_send conn (A.object ["id" .= id, "method" .= A.String (T.pack name), "params" .= A.Array (V.fromList [a])])
+            response <- MV.takeMVar var
             case response of
-              Object (mlookup ["result", "error"] -> Just [result, Null]) ->
-                case fromJSON result of
-                  Success resultValue -> return resultValue
-                  Error err -> fail ("Invalid return type: " ++ show err)
-              Object (mlookup ["result", "error"] -> Just [Null, error]) ->
+              A.Object (mlookup ["result", "error"] -> Just [result, A.Null]) ->
+                case A.fromJSON result of
+                  A.Success resultValue -> return resultValue
+                  A.Error err -> fail ("Invalid return type: " ++ show err)
+              A.Object (mlookup ["result", "error"] -> Just [A.Null, error]) ->
                 fail ("Service failed: " ++ show error)
               _ -> fail ("Invalid response:" ++ show response))
 
 
-newConnection debug input output =
+newConnectionHandles debug input output =
   do
     (handle, send, close) <- mkHandler input output
-    pending <- H.new (==) (fromInteger . toInteger . hash)
+    (pending :: H.HashTable A.Value (IO ())) <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
-    writeVar <- newEmptyMVar
-    counter <- newMVar 0
+    writeVar <- MV.newEmptyMVar
+    counter <- MV.newMVar 0
     let
       writer =
         do
-          value <- takeMVar writeVar
+          value <- MV.takeMVar writeVar
           when debug $ hPutStrLn stderr ("Writing: " ++ show value)
           send value
           when debug $ hPutStrLn stderr ("Written")
@@ -63,25 +77,16 @@ newConnection debug input output =
                     when debug $ hPutStrLn stderr ("Read: " ++ show v)
                     dispatch v)
       conn = Connection {
-              conn_send = (putMVar writeVar),
+              conn_send = (MV.putMVar writeVar),
               conn_pending = pending,
-              conn_counter = modifyMVar counter (\v -> return (v + 1, v)),
+              conn_counter = MV.modifyMVar counter (\v -> return (v + 1, v)),
               conn_methods = methods
               }
     forkIO reader
     forkIO writer
     return conn
 
-newConnectionHandles debug handleIn handleOut =
-  do
-    hSetBuffering handleIn NoBuffering
-    hSetBuffering handleOut NoBuffering
-    newConnection debug (hGetSome handleIn 1024) (B.hPut handleOut)
-
-hGetSome h s = do
-  chunk <- StrictB.hGetSome h s
-  return $ B.fromChunks [chunk]
-
+{-
 newConnectionCommand debug cmdSpec =
   do
     (Just inH, Just outH, Nothing, process) <- P.createProcess $ P.CreateProcess {
@@ -93,29 +98,30 @@ newConnectionCommand debug cmdSpec =
                                             P.std_err = P.Inherit,
                                             P.close_fds = True}
     newConnectionHandles debug outH inH
+-}
 
-dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [Null, method, params])) = undefined -- TODO: notifications
-dispatch conn (Object (mlookup ["id", "method", "params"] -> Just [id, String name, Array (toList -> [params])])) =
+dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Null, method, params])) = undefined -- TODO: notifications
+dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [id, A.String name, A.Array (V.toList -> [params])])) =
   do
     handlerMb <- H.lookup (conn_methods conn) (T.unpack name)
     case handlerMb of
       Just (Handler handler) ->
         do
           response <-
-            case fromJSON params of
-              Success paramsV ->
+            case A.fromJSON params of
+              A.Success paramsV ->
                     catch
                       (do
                         res <- handler paramsV
-                        return (object ["id" .= id, "error" .= Null, "result" .= toJSON res]))
+                        return (A.object ["id" .= id, "error" .= A.Null, "result" .= A.toJSON res]))
                       (\err -> return (errorResponse $ show err))
-              Error err -> return $ errorResponse err
+              A.Error err -> return $ errorResponse err
           conn_send conn response
       Nothing -> conn_send conn (errorResponse ("Unknown method: " ++ T.unpack name))
   where
-    errorResponse errorString = object ["id" .= id, "error" .= errorString, "result" .= Null]
+    errorResponse errorString = A.object ["id" .= id, "error" .= errorString, "result" .= A.Null]
 
-dispatch conn o@(Object (mlookup ["id", "result", "error"] -> Just [id, _, _])) =
+dispatch conn o@(A.Object (mlookup ["id", "result", "error"] -> Just [id, _, _])) =
   do
     handler <- H.lookup (conn_pending conn) id
     case handler of
@@ -123,6 +129,7 @@ dispatch conn o@(Object (mlookup ["id", "result", "error"] -> Just [id, _, _])) 
       Nothing -> fail ("Unknown response:" ++ show o)
 dispatch _ o = fail ("Unknown message:" ++ show o)
 
+{-
 _test1 r w = do
   c <- newConnection False r w
   registerMethodHandler c "m1" (undefined :: Int -> IO String)
@@ -130,3 +137,4 @@ _test1 r w = do
   m3 <- (getMethod c "m3" :: IO (Int -> IO String))
   m4 <- (getMethod c "m4" :: IO (String -> IO Int))
   return c
+-}
