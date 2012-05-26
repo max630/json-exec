@@ -2,31 +2,9 @@
 {-# LANGUAGE ExistentialQuantification, ViewPatterns, OverloadedStrings, NoMonomorphismRestriction, ScopedTypeVariables #-}
 module RPC where
 
-import Data.ByteString (ByteString, hPutStr)
-import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString as StrictB
-import Data.Aeson (FromJSON, fromJSON, ToJSON, toJSON, Value(Array, Object, Number, Null, String), object, (.=), Result(Success, Error), json)
-import Data.Attoparsec.Lazy (parseWith)
-import qualified Data.Attoparsec.Lazy as AP
-import Data.Attoparsec.Number (Number(I))
-import Data.Aeson.Encode (fromValue)
-import qualified Data.Text as T
-import Data.Text.Lazy.Encoding (encodeUtf8)
-import Data.Vector (singleton)
-import Data.HashTable (insert, delete)
-import Data.Text.Lazy.Builder (toLazyText)
--- import qualified Data.Map as M
+import qualified Data.Aeson as A
 import qualified Data.HashTable as H
-import Control.Concurrent.MVar (newEmptyMVar, newMVar, putMVar, takeMVar, modifyMVar)
-import Control.Exception (bracket_)
-import Control.Concurrent (forkIO)
-import Data.Hashable (hash)
-import System.IO (hPutStrLn, hSetBuffering, BufferMode(NoBuffering), stderr)
-import Data.Vector (toList)
-import qualified System.Process as P
-import Control.Monad (when)
-
-import qualified Data.HashMap.Strict as M
+import qualified GHC.IO.Handle as GIO
 
 data Connection a b = Connection { conn_send :: Value -> IO (),
                                   conn_pending :: a,
@@ -64,8 +42,9 @@ getMethod conn name = return f
               _ -> fail ("Invalid response:" ++ show response))
 
 
-newConnection debug (readF :: IO B.ByteString) writeF =
+newConnection debug input output =
   do
+    (handle, send, close) <- mkHandler input output
     pending <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
     writeVar <- newEmptyMVar
@@ -75,28 +54,21 @@ newConnection debug (readF :: IO B.ByteString) writeF =
         do
           value <- takeMVar writeVar
           when debug $ hPutStrLn stderr ("Writing: " ++ show value)
-          writeF (encodeUtf8 $ toLazyText $ fromValue value)
+          send value
           when debug $ hPutStrLn stderr ("Written")
           writer
-      reader buffer =
+      reader =
         do
-          when debug $ hPutStrLn stderr ("Reading")
-          parseResult <- parseWith readF json buffer
-          when debug $ hPutStrLn stderr ("Read: " ++ show parseResult)
-          case parseResult of
-            AP.Fail _ _ msg -> fail ("failed to parse input: " ++ msg)
-            AP.Partial _ -> fail "Partial must not be here"
-            AP.Done newBuffer message ->
-              do
-                dispatch conn message
-                reader newBuffer
+          handle (\v -> do
+                    when debug $ hPutStrLn stderr ("Read: " ++ show v)
+                    dispatch v)
       conn = Connection {
               conn_send = (putMVar writeVar),
               conn_pending = pending,
               conn_counter = modifyMVar counter (\v -> return (v + 1, v)),
               conn_methods = methods
               }
-    forkIO (reader "")
+    forkIO reader
     forkIO writer
     return conn
 
