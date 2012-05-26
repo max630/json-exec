@@ -1,4 +1,4 @@
-module Main where
+module TestServer where
 
 import qualified RPC
 import System.IO (stdin, stdout)
