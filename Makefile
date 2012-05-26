@@ -1,8 +1,10 @@
 
 
 
-%.hi: %.hs
+%.hi: %.hs always
 	ghc $(GHC_OPTS) --make $^
 
-%: %.hs
-	ghc $(GHC_OPTS) -main-is $@.main --make $^
+%: %.hs always
+	ghc $(GHC_OPTS) -main-is $@.main --make $<
+
+always:
