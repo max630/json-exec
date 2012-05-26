@@ -21,7 +21,9 @@ mkHandler input output = (handle, send, close)
                 E.=$ EL.isolateWhile isRight
                 E.=$ EL.map (\(Right v) -> v)
                 E.=$ EL.mapM_ dispatch))
-    send value = MIO.liftIO $ BSL.hPut output $ A.encode value
+    send value = MIO.liftIO $ do
+                    BSL.hPut output $ A.encode value
+                    GIO.hFlush output
     close = MIO.liftIO $ GIO.hClose output
 
 isRight (Left _) = False
