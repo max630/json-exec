@@ -58,8 +58,8 @@ getMethod conn name = return f
 
 newConnectionHandles debug input output =
   do
-    (handle, send, close) <- mkHandler input output
-    (pending :: H.HashTable A.Value (IO ())) <- H.new (==) (fromInteger . toInteger . hash)
+    let (handle, send, close) = mkHandler input output
+    pending <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
     writeVar <- MV.newEmptyMVar
     counter <- MV.newMVar 0
@@ -75,7 +75,7 @@ newConnectionHandles debug input output =
         do
           handle (\v -> do
                     when debug $ hPutStrLn stderr ("Read: " ++ show v)
-                    dispatch v)
+                    dispatch conn v)
       conn = Connection {
               conn_send = (MV.putMVar writeVar),
               conn_pending = pending,
