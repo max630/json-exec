@@ -4,7 +4,7 @@ import qualified RPC
 import System.Process (CmdSpec(RawCommand))
 import System.IO.Unsafe (unsafePerformIO)
 
-makeConnection = RPC.newConnectionCommand (RawCommand "./TestServer" [])
+makeConnection = RPC.newConnectionCommand True (RawCommand "./TestServer" [])
 
 main =
   do

@@ -10,6 +10,7 @@ import qualified Control.Concurrent.MVar as MV
 import qualified Control.Exception as E
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import qualified System.Process as P
 
 import Data.Aeson ((.=))
 import Data.Attoparsec.Number (Number(I))
@@ -21,9 +22,9 @@ import Data.Hashable (Hashable(hash))
 import IOFrontend (mkHandler)
 
 data Connection a b = Connection { conn_send :: A.Value -> IO (),
-                                  conn_pending :: H.HashTable A.Value a,
+                                  conn_pending :: a,
                                   conn_counter :: IO Integer,
-                                  conn_methods :: H.HashTable String b}
+                                  conn_methods :: b}
 
 data Handler = forall a b . (A.FromJSON a, A.ToJSON b) => Handler (a -> IO b)
 
@@ -44,7 +45,7 @@ getMethod conn name = return f
           (H.insert (conn_pending conn) (A.Number $ I id) (MV.putMVar var))
           (H.delete (conn_pending conn) (A.Number $ I id))
           (do
-            conn_send conn (A.object ["id" .= id, "method" .= A.String (T.pack name), "params" .= A.Array (V.fromList [a])])
+            conn_send conn (A.object ["id" .= id, "method" .= A.String (T.pack name), "params" .= A.toJSON a])
             response <- MV.takeMVar var
             case response of
               A.Object (mlookup ["result", "error"] -> Just [result, A.Null]) ->
@@ -86,7 +87,6 @@ newConnectionHandles debug input output =
     forkIO writer
     return conn
 
-{-
 newConnectionCommand debug cmdSpec =
   do
     (Just inH, Just outH, Nothing, process) <- P.createProcess $ P.CreateProcess {
@@ -96,9 +96,9 @@ newConnectionCommand debug cmdSpec =
                                             P.std_in = P.CreatePipe,
                                             P.std_out = P.CreatePipe,
                                             P.std_err = P.Inherit,
-                                            P.close_fds = True}
+                                            P.close_fds = True,
+                                            P.create_group = False}
     newConnectionHandles debug outH inH
--}
 
 dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Null, method, params])) = undefined -- TODO: notifications
 dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [id, A.String name, A.Array (V.toList -> [params])])) =
