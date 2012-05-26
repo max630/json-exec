@@ -110,11 +110,11 @@ dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [id, A.Strin
           response <-
             case A.fromJSON params of
               A.Success paramsV ->
-                    catch
+                    E.catch
                       (do
                         res <- handler paramsV
                         return (A.object ["id" .= id, "error" .= A.Null, "result" .= A.toJSON res]))
-                      (\err -> return (errorResponse $ show err))
+                      (\err -> return (errorResponse $ show (err :: E.SomeException)))
               A.Error err -> return $ errorResponse err
           conn_send conn response
       Nothing -> conn_send conn (errorResponse ("Unknown method: " ++ T.unpack name))
