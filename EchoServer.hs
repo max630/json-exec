@@ -7,8 +7,13 @@ import qualified GHC.IO.Handle.FD as GIOF
 
 import IOFrontend (mkHandler)
 
+import System.IO (hPutStrLn, stderr)
+
 main = do
   let (handle, send, close) = mkHandler GIOF.stdin GIOF.stdout
-  handle (\v -> send (A.Object (M.fromList [("id", A.Null), ("echo", v)])))
+  hPutStrLn stderr "start handling"
+  handle (\v -> do
+            hPutStrLn stderr "received"
+            send (A.Object (M.fromList [("id", A.Null), ("echo", v)])))
   close
 
