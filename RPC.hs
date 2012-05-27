@@ -81,8 +81,7 @@ newConnectionHandles debug input output =
               conn_send = (MV.putMVar writeVar),
               conn_pending = pending,
               conn_counter = MV.modifyMVar counter (\v -> return (v + 1, v)),
-              conn_methods = methods
-              }
+              conn_methods = methods }
     forkIO reader
     forkIO writer
     return conn
