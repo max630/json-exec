@@ -45,7 +45,7 @@ getMethod conn name = return f
           (H.insert (conn_pending conn) (A.Number $ I id) (MV.putMVar var))
           (H.delete (conn_pending conn) (A.Number $ I id))
           (do
-            conn_send conn (A.object ["id" .= id, "method" .= A.String (T.pack name), "params" .= [A.toJSON a]])
+            conn_send conn (A.object ["id" .= id, "method" .= name, "params" .= [A.toJSON a]])
             response <- MV.takeMVar var
             case response of
               A.Object (mlookup ["result", "error"] -> Just [result, A.Null]) ->
