@@ -1,4 +1,4 @@
-module Main where
+module TestClient where
 
 import qualified RPC
 import System.Process (CmdSpec(RawCommand))
