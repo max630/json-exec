@@ -42,10 +42,10 @@ getMethod conn name = return f
         id <- (conn_counter conn)
         var <- MV.newEmptyMVar
         E.bracket_
-          (H.insert (conn_pending conn) (A.Number $ I id) (MV.putMVar var))
-          (H.delete (conn_pending conn) (A.Number $ I id))
+          (H.insert (conn_pending conn) id (MV.putMVar var))
+          (H.delete (conn_pending conn) id)
           (do
-            conn_send conn (A.object ["id" .= id, "method" .= name, "params" .= [A.toJSON a]])
+            conn_send conn (A.object ["id" .= id, "method" .= name, "params" .= [a]])
             response <- MV.takeMVar var
             case response of
               A.Object (mlookup ["result", "error"] -> Just [result, A.Null]) ->
@@ -100,7 +100,7 @@ newConnectionCommand debug cmdSpec =
     newConnectionHandles debug outH inH
 
 dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Null, method, params])) = undefined -- TODO: notifications
-dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [id, A.String name, A.Array (V.toList -> [params])])) =
+dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Number (I id), A.String name, A.Array (V.toList -> [params])])) =
   do
     handlerMb <- H.lookup (conn_methods conn) (T.unpack name)
     case handlerMb of
@@ -120,7 +120,7 @@ dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [id, A.Strin
   where
     errorResponse errorString = A.object ["id" .= id, "error" .= errorString, "result" .= A.Null]
 
-dispatch conn o@(A.Object (mlookup ["id", "result", "error"] -> Just [id, _, _])) =
+dispatch conn o@(A.Object (mlookup ["id", "result", "error"] -> Just [A.Number (I id), _, _])) =
   do
     handler <- H.lookup (conn_pending conn) id
     case handler of
