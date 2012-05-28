@@ -112,7 +112,7 @@ dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Number (I
                     E.catch
                       (do
                         res <- handler paramsV
-                        return (A.object ["id" .= id, "error" .= A.Null, "result" .= A.toJSON res]))
+                        return (A.object ["id" .= id, "error" .= A.Null, "result" .= res]))
                       (\err -> return (errorResponse $ show (err :: E.SomeException)))
               A.Error err -> return $ errorResponse err
           conn_send conn response
