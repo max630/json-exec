@@ -8,8 +8,6 @@ import qualified Control.Concurrent.MVar as MV
 import qualified Control.Exception as E
 import qualified System.Process as P
 
-import Data.Aeson ((.=))
-import Data.Attoparsec.Number (Number(I))
 import Control.Monad (when)
 import System.IO (hPutStrLn, stderr)
 import Control.Concurrent (forkIO)
@@ -61,7 +59,7 @@ getMethod conn name = return f
 newConnectionHandles debug input output =
   do
     let (handle, send, close) = mkHandler input output
-    (pending :: H.HashTable A.Value (A.Value -> IO ())) <- H.new (==) (fromInteger . toInteger . hash)
+    pending <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
     writeVar <- MV.newEmptyMVar
     counter <- MV.newMVar 0
