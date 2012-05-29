@@ -1,6 +1,7 @@
-{-# OPTIONS_GHC #-}
 {-# LANGUAGE ExistentialQuantification, ViewPatterns, OverloadedStrings, NoMonomorphismRestriction, ScopedTypeVariables #-}
-module RPC where
+module RPC (Connection, Handler,
+            newConnectionHandles, newConnectionCommand,
+            registerMethodHandler, callMethod) where
 
 import qualified Data.Aeson as A
 import qualified Data.HashTable as H
@@ -12,12 +13,14 @@ import Control.Monad (when)
 import System.IO (hPutStrLn, stderr)
 import Control.Concurrent (forkIO)
 import Data.Hashable (Hashable(hash))
+import Control.Applicative (Alternative((<|>)))
+import Control.Monad (guard)
+
+import GHC.IO.Handle (Handle)
 
 import IOFrontend (mkHandler)
 import RPCTypes (Response(Response), Request(Request), Notification(Notification), parseM)
 
-import Control.Applicative (Alternative((<|>)))
-import Control.Monad (guard)
 
 data Connection = Connection { conn_send :: A.Value -> IO (),
                                   conn_pending :: H.HashTable A.Value (A.Value -> IO ()),
@@ -53,6 +56,7 @@ callMethod conn name a =
             return (fail ("Service failed: " ++ show error))
           <|> (fail ("Cannot recognize response: " ++ show response)))))
 
+newConnectionHandles :: Bool -> Handle -> Handle -> IO Connection
 newConnectionHandles debug input output =
   do
     let (handle, send, close) = mkHandler input output
@@ -82,6 +86,7 @@ newConnectionHandles debug input output =
     forkIO writer
     return conn
 
+newConnectionCommand :: Bool -> P.CmdSpec -> IO Connection
 newConnectionCommand debug cmdSpec =
   do
     (Just inH, Just outH, Nothing, process) <- P.createProcess $ P.CreateProcess {
