@@ -30,31 +30,28 @@ data Handler = forall a b . (A.FromJSON a, A.ToJSON b) => Handler (a -> IO b)
 registerMethodHandler :: (A.FromJSON a, A.ToJSON b) => Connection -> String -> (a -> IO b) -> IO ()
 registerMethodHandler conn name handler = H.insert (conn_methods conn) name (Handler handler)
 
--- getMethod :: (ToJSON a, FromJSON b) => Connection -> String -> IO (a -> IO b)
-getMethod conn name = return f
-  where
-    f a =
-      do
-        idNum <- (conn_counter conn)
-        let id = A.toJSON idNum
-        var <- MV.newEmptyMVar
-        E.bracket_
-          (H.insert (conn_pending conn) id (MV.putMVar var))
-          (H.delete (conn_pending conn) id)
-          (do
-            conn_send conn (A.toJSON (Request (A.toJSON id) name [a]))
-            response <- MV.takeMVar var
-            -- TODO: make error reporting more thorough
-            -- current view is for tutoring only
-            parseM ((do
-                Response _ A.Null result <- A.parseJSON response
-                return (return result))
-              <|> (do
-                Response _ error A.Null <- A.parseJSON response
-                guard (error /= A.Null)
-                return (fail ("Service failed: " ++ show error))
-              <|> (fail ("Cannot recognize response: " ++ show response)))))
-
+callMethod :: (A.FromJSON a, A.ToJSON b) => Connection -> String -> b -> IO a
+callMethod conn name a =
+  do
+    idNum <- (conn_counter conn)
+    let id = A.toJSON idNum
+    var <- MV.newEmptyMVar
+    E.bracket_
+      (H.insert (conn_pending conn) id (MV.putMVar var))
+      (H.delete (conn_pending conn) id)
+      (do
+        conn_send conn (A.toJSON (Request (A.toJSON id) name [a]))
+        response <- MV.takeMVar var
+        -- TODO: make error reporting more thorough
+        -- current view is for tutoring only
+        parseM ((do
+            Response _ A.Null result <- A.parseJSON response
+            return (return result))
+          <|> (do
+            Response _ error A.Null <- A.parseJSON response
+            guard (error /= A.Null)
+            return (fail ("Service failed: " ++ show error))
+          <|> (fail ("Cannot recognize response: " ++ show response)))))
 
 newConnectionHandles debug input output =
   do
