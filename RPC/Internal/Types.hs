@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, ViewPatterns #-}
-module RPCTypes where
+module RPC.Internal.Types where
 
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as AT

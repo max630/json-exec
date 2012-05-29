@@ -18,8 +18,8 @@ import Control.Monad (guard)
 
 import GHC.IO.Handle (Handle)
 
-import IOFrontend (mkHandler)
-import RPCTypes (Response(Response), Request(Request), Notification(Notification), parseM)
+import RPC.Internal.IO (mkHandler)
+import RPC.Internal.Types (Response(Response), Request(Request), Notification(Notification), parseM)
 
 
 data Connection = Connection { conn_send :: A.Value -> IO (),

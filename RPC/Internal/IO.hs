@@ -1,4 +1,4 @@
-module IOFrontend where
+module RPC.Internal.IO where
 
 import qualified Control.Monad.IO.Class as MIO
 import qualified Data.Aeson as A
