@@ -4,12 +4,8 @@ module RPC where
 
 import qualified Data.Aeson as A
 import qualified Data.HashTable as H
-import qualified Data.HashMap.Strict as M
-import qualified GHC.IO.Handle as GIO
 import qualified Control.Concurrent.MVar as MV
 import qualified Control.Exception as E
-import qualified Data.Text as T
-import qualified Data.Vector as V
 import qualified System.Process as P
 
 import Data.Aeson ((.=))
@@ -20,7 +16,10 @@ import Control.Concurrent (forkIO)
 import Data.Hashable (Hashable(hash))
 
 import IOFrontend (mkHandler)
-import RPCTypes (Response(Response), Request(Request), Notification(Notification))
+import RPCTypes (Response(Response), Request(Request), Notification(Notification), parseM)
+
+import Control.Applicative (Alternative((<|>)))
+import Control.Monad (guard)
 
 data Connection a b = Connection { conn_send :: A.Value -> IO (),
                                   conn_pending :: a,
@@ -33,14 +32,13 @@ data Handler = forall a b . (A.FromJSON a, A.ToJSON b) => Handler (a -> IO b)
 -- registerMethodHandler :: (FromJSON a, ToJSON b) => Connection -> String -> (a -> IO b) -> IO ()
 registerMethodHandler conn name handler = H.insert (conn_methods conn) name (Handler handler)
 
-mlookup ks kx = if all (flip M.member kx) ks then Just (map ((M.!) kx) ks) else Nothing
-
 -- getMethod :: (ToJSON a, FromJSON b) => Connection -> String -> IO (a -> IO b)
 getMethod conn name = return f
   where
     f a =
       do
-        id <- (conn_counter conn)
+        idNum <- (conn_counter conn)
+        let id = A.toJSON idNum
         var <- MV.newEmptyMVar
         E.bracket_
           (H.insert (conn_pending conn) id (MV.putMVar var))
@@ -48,20 +46,22 @@ getMethod conn name = return f
           (do
             conn_send conn (A.toJSON (Request (A.toJSON id) name [a]))
             response <- MV.takeMVar var
-            case A.fromJSON response of
-              A.Success (Response _ error resultValue) | error /= A.Null ->
-                if resultValue == A.Null
-                  then fail ("Service failed: " ++ show error)
-                  else fail "Invalid response: both error and result are non-null"
-              _ -> case A.fromJSON response of
-                A.Success (Response _ _ result) -> return result
-                A.Error err -> fail err)
+            -- TODO: make error reporting more thorough
+            -- current view is for tutoring only
+            parseM ((do
+                Response _ A.Null result <- A.parseJSON response
+                return (return result))
+              <|> (do
+                Response _ error A.Null <- A.parseJSON response
+                guard (error /= A.Null)
+                return (fail ("Service failed: " ++ show error))
+              <|> (fail ("Cannot recognize response: " ++ show response)))))
 
 
 newConnectionHandles debug input output =
   do
     let (handle, send, close) = mkHandler input output
-    pending <- H.new (==) (fromInteger . toInteger . hash)
+    (pending :: H.HashTable A.Value (A.Value -> IO ())) <- H.new (==) (fromInteger . toInteger . hash)
     methods <- H.new (==) (fromInteger . toInteger . hash)
     writeVar <- MV.newEmptyMVar
     counter <- MV.newMVar 0
@@ -100,34 +100,32 @@ newConnectionCommand debug cmdSpec =
                                             P.create_group = False}
     newConnectionHandles debug outH inH
 
-dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Null, method, params])) = undefined -- TODO: notifications
-dispatch conn (A.Object (mlookup ["id", "method", "params"] -> Just [A.Number (I id), A.String name, A.Array (V.toList -> [params])])) =
-  do
-    handlerMb <- H.lookup (conn_methods conn) (T.unpack name)
-    case handlerMb of
-      Just (Handler handler) ->
-        do
-          response <-
-            case A.fromJSON params of
-              A.Success paramsV ->
-                    E.catch
-                      (do
-                        res <- handler paramsV
-                        return (A.object ["id" .= id, "error" .= A.Null, "result" .= res]))
-                      (\err -> return (errorResponse $ show (err :: E.SomeException)))
-              A.Error err -> return $ errorResponse err
-          conn_send conn response
-      Nothing -> conn_send conn (errorResponse ("Unknown method: " ++ T.unpack name))
+dispatch conn value =
+    parseM ((do
+              Notification val <- A.parseJSON value
+              (fail "notifications not supported"))
+            <|> (do
+              Request id name [paramValue] <- A.parseJSON value
+              return (do
+                handlerMb <- H.lookup (conn_methods conn) name
+                case handlerMb of
+                  Just (Handler handler) -> E.catch (handle id paramValue handler) (\err -> sendError id (show (err :: E.SomeException)))
+                  Nothing -> sendError id ("Method \"" ++ name ++ "\" not found")))
+            <|> (do
+              Response id _ (_ :: A.Value) <- A.parseJSON value
+              return (do
+                rhMb <- H.lookup (conn_pending conn) id
+                case rhMb of
+                  Just rh -> rh value
+                  Nothing -> fail ("Unknown request id:" ++ show id))))
   where
-    errorResponse errorString = A.object ["id" .= id, "error" .= errorString, "result" .= A.Null]
-
-dispatch conn o@(A.Object (mlookup ["id", "result", "error"] -> Just [A.Number (I id), _, _])) =
-  do
-    handler <- H.lookup (conn_pending conn) id
-    case handler of
-      Just h -> h o
-      Nothing -> fail ("Unknown response:" ++ show o)
-dispatch _ o = fail ("Unknown message:" ++ show o)
+    sendError id err = conn_send conn (A.toJSON (Response id (A.toJSON err) A.Null))
+    handle id paramValue handler =
+      parseM (do
+          param <- A.parseJSON paramValue
+          return (do
+            result <- handler param
+            conn_send conn (A.toJSON (Response id A.Null result))))
 
 {-
 _test1 r w = do

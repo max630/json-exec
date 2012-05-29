@@ -2,6 +2,7 @@
 module RPCTypes where
 
 import qualified Data.Aeson as A
+import qualified Data.Aeson.Types as AT
 import qualified Data.HashMap.Strict as M
 
 import Data.Aeson ((.=), (.:))
@@ -35,3 +36,7 @@ instance A.ToJSON Notification where
 instance A.FromJSON Notification where
   parseJSON o@(A.Object (M.lookup "id" -> Just A.Null)) = return (Notification o)
   parseJSON _ = fail "fromJSON: notification must be an object with null id"
+
+parseM p = case AT.parse (const p) () of
+  A.Success res -> res
+  A.Error err -> fail err
