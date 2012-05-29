@@ -15,6 +15,15 @@ Library
   Exposed-modules:     RPC
   
   -- Packages needed in order to build this package.
-  -- Build-depends:       
+  Build-depends:        base ==4.*,
+                        process ==1.1.*,
+                        aeson >=0.2,
+                        attoparsec-enumerator ==0.3.*,
+                        hashable,
+                        unordered-containers,
+                        enumerator,
+                        bytestring,
+                        attoparsec,
+                        transformers
   
   Other-modules:        RPC.Internal.Types, RPC.Internal.IO
