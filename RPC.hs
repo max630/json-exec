@@ -49,10 +49,13 @@ getMethod conn name = return f
             conn_send conn (A.toJSON (Request (A.toJSON id) name [a]))
             response <- MV.takeMVar var
             case A.fromJSON response of
-              A.Success (Response _ A.Null result) -> return result
-              -- FIXME: consider also this case without breaking the result
-              -- A.Success (Response _ error A.Null) -> fail "Invalid response: both error and response are non-null"
-              A.Error err -> fail err)
+              A.Success (Response _ error resultValue) | error /= A.Null ->
+                if resultValue == A.Null
+                  then fail ("Service failed: " ++ show error)
+                  else fail "Invalid response: both error and result are non-null"
+              _ -> case A.fromJSON response of
+                A.Success (Response _ _ result) -> return result
+                A.Error err -> fail err)
 
 
 newConnectionHandles debug input output =
