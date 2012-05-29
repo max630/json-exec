@@ -20,6 +20,7 @@ import Control.Concurrent (forkIO)
 import Data.Hashable (Hashable(hash))
 
 import IOFrontend (mkHandler)
+import RPCTypes (Response(Response), Request(Request), Notification(Notification))
 
 data Connection a b = Connection { conn_send :: A.Value -> IO (),
                                   conn_pending :: a,
@@ -45,16 +46,13 @@ getMethod conn name = return f
           (H.insert (conn_pending conn) id (MV.putMVar var))
           (H.delete (conn_pending conn) id)
           (do
-            conn_send conn (A.object ["id" .= id, "method" .= name, "params" .= [a]])
+            conn_send conn (A.toJSON (Request (A.toJSON id) name [a]))
             response <- MV.takeMVar var
-            case response of
-              A.Object (mlookup ["result", "error"] -> Just [result, A.Null]) ->
-                case A.fromJSON result of
-                  A.Success resultValue -> return resultValue
-                  A.Error err -> fail ("Invalid return type: " ++ show err)
-              A.Object (mlookup ["result", "error"] -> Just [A.Null, error]) ->
-                fail ("Service failed: " ++ show error)
-              _ -> fail ("Invalid response:" ++ show response))
+            case A.fromJSON response of
+              A.Success (Response _ A.Null result) -> return result
+              -- FIXME: consider also this case without breaking the result
+              -- A.Success (Response _ error A.Null) -> fail "Invalid response: both error and response are non-null"
+              A.Error err -> fail err)
 
 
 newConnectionHandles debug input output =
