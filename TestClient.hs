@@ -13,3 +13,4 @@ main =
     let m v = unsafePerformIO (mIO v)
     putStrLn ("m 1 = " ++ show (m 1))
     putStrLn ("m 10 = " ++ show (m 10))
+    putStrLn ("m -1 = " ++ show (m (-1)))
