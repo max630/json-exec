@@ -19,15 +19,15 @@ import RPCTypes (Response(Response), Request(Request), Notification(Notification
 import Control.Applicative (Alternative((<|>)))
 import Control.Monad (guard)
 
-data Connection a b = Connection { conn_send :: A.Value -> IO (),
-                                  conn_pending :: a,
+data Connection = Connection { conn_send :: A.Value -> IO (),
+                                  conn_pending :: H.HashTable A.Value (A.Value -> IO ()),
                                   conn_counter :: IO Integer,
-                                  conn_methods :: b}
+                                  conn_methods :: H.HashTable String Handler}
 
 data Handler = forall a b . (A.FromJSON a, A.ToJSON b) => Handler (a -> IO b)
 
 
--- registerMethodHandler :: (FromJSON a, ToJSON b) => Connection -> String -> (a -> IO b) -> IO ()
+registerMethodHandler :: (A.FromJSON a, A.ToJSON b) => Connection -> String -> (a -> IO b) -> IO ()
 registerMethodHandler conn name handler = H.insert (conn_methods conn) name (Handler handler)
 
 -- getMethod :: (ToJSON a, FromJSON b) => Connection -> String -> IO (a -> IO b)
