@@ -2,10 +2,13 @@
 TODO
 
 + make IO
- - make it interruptible (try to keep it simple)
-- make hardcoded real-like dispatch
-- test server and client
-- real dispatch
+ - (?) make it interruptible (try to keep it simple)
++ test server and client
++ real dispatch
+- implement closing with corret sending of fails
+- fire close at proper place
+- think about testing in one process
+- tests, tests, tests
 \NewEntry
 OLD_TODO
 
