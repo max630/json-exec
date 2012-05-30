@@ -5,6 +5,8 @@ RPC-Exec allows implementing pligin as a separated executable in its own languag
 in [http://json-rpc.org/wiki/specification](http://json-rpc.org/wiki/specification). It was started during development of some perl code, for prototyping
 new functionality in Haskell. I did not feel like messing with FFI of both them in a single process, so decided to go this way.
 
+Later it turned out to be not needed, but I still have some plans to use it, so let it be around, just in case.
+
 Status
 --
 
