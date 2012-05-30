@@ -12,7 +12,7 @@ Status
 
 The tree contains haskell library RPC. It is a primary implementation. It supports running a program
 or custom connection from two handles. It can handle requests in both ways, and intended to be able
-to run several requests in parallel, thought this is not yet so.
+to run several requests in parallel, though this is not yet so.
 It is still a deep alpha, particularly some very important things still not implemented.
 
 Also contains a perl library RPCX.pm. It is not working, only sketched. I intended it to be able to act as a simple client.
